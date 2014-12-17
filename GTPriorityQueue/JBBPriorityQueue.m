@@ -36,18 +36,20 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 @interface JBBPriorityQueue ()
 // synthesized properties
 
-@property (assign) __strong CFBinaryHeapRef objs;
+@property (assign) CFBinaryHeapRef objs;
 @property (retain) NSMutableArray *objsArray;
 @property (assign) BOOL heapified;
 @property (assign) BOOL boxed;
-@property (retain) JBBComparisonBlock comparisonBlock;
+@property (copy) JBBComparisonBlock comparisonBlock;
 @property (assign) CFBinaryHeapCallBacks callBacks;
 
 - (id)initWithBlock:(JBBComparisonBlock)comparisonBlock class:(Class)classToStore ordering:(NSComparisonResult)ordering;
 - (void)buildHeap;
+
 @end
 
 @implementation JBBPriorityQueue
+
 @synthesize objs = mObjs;
 @synthesize objsArray = mObjsArray;
 @synthesize heapified = mHeapified;
@@ -104,7 +106,7 @@ void JBBBuildDescriptionCallBack(const void *, void *);
             mCallBacks.compare = (ordering == NSOrderedAscending) ? JBBMinimumCallBack : JBBMaximumCallBack;
         }
 
-        self.objs = (CFBinaryHeapRef)CFMakeCollectable(CFBinaryHeapCreate(NULL, 0, &mCallBacks, NULL));
+        self.objs = CFBinaryHeapCreate(NULL, 0, &mCallBacks, NULL);
         self.objsArray = [NSMutableArray array];
     }
 
@@ -119,8 +121,6 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 
     self.objsArray = nil;
     self.comparisonBlock = nil;
-
-    [super dealloc];
 }
 
 - (void)buildHeap {
@@ -130,7 +130,7 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 
     [self.objsArray enumerateObjectsUsingBlock:^(id obj, NSUInteger index, BOOL *stop) {
         [obj am_associateValue:self withKey:@"JBBSortDelegate"];
-        CFBinaryHeapAddValue(self.objs, obj);
+        CFBinaryHeapAddValue(self.objs, (__bridge const void *)(obj));
     }];
 
     [self.objsArray removeAllObjects];
@@ -141,7 +141,7 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 - (void)push:(id)obj {
     if (self.heapified) {
         [obj am_associateValue:self withKey:@"JBBSortDelegate"];
-        CFBinaryHeapAddValue(self.objs, obj);
+        CFBinaryHeapAddValue(self.objs, (__bridge const void *)(obj));
     } else {
         [self.objsArray addObject:obj];
     }
@@ -154,11 +154,11 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 }
 
 - (id)pop {
-    id returnVal = [[self peek] retain];
+    id returnVal = [self peek];
 
     CFBinaryHeapRemoveMinimumValue(self.objs);
 
-    return [returnVal autorelease];
+    return returnVal;
 }
 
 - (id)peek {
@@ -167,7 +167,7 @@ void JBBBuildDescriptionCallBack(const void *, void *);
     // There is a bug in CFBinaryHeapGetMinimumIfPresent().
     // FIXME: rdar://problem/7444195
 
-    return [[(id)CFBinaryHeapGetMinimum(self.objs) retain] autorelease];
+    return (id)CFBinaryHeapGetMinimum(self.objs);
 
     //    id returnVal = nil;
     //
@@ -208,7 +208,7 @@ void JBBBuildDescriptionCallBack(const void *, void *);
     NSMutableString *result = [NSMutableString stringWithFormat:@"<JBBPriorityQueue: %p> {", self];
     if (CFBinaryHeapGetCount(tempHeap) != 0) {
         [result appendFormat:@"\n"];
-        CFBinaryHeapApplyFunction(tempHeap, JBBBuildDescriptionCallBack, result);
+        CFBinaryHeapApplyFunction(tempHeap, JBBBuildDescriptionCallBack, (__bridge void *)(result));
     }
     [result appendFormat:@"}"];
 
@@ -265,12 +265,26 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 
     const void **array1 = calloc(CFBinaryHeapGetCount(heap1), sizeof(void *));
     CFBinaryHeapGetValues(heap1, array1);
-    NSArray *NSArray1 = [NSArray arrayWithObjects:(id *)array1 count:CFBinaryHeapGetCount(heap1)];
+    
+    NSMutableArray *firstMutArray = [NSMutableArray array];
+    for (int i = 0; i < CFBinaryHeapGetCount(heap1); i++) {
+    
+        [firstMutArray addObject:(__bridge id)(*array1 + i*(sizeof(void *)))];
+    }
+    
+    NSArray *NSArray1 = [NSArray arrayWithArray:firstMutArray];
     free(array1);
 
     const void **array2 = calloc(CFBinaryHeapGetCount(heap2), sizeof(void *));
     CFBinaryHeapGetValues(heap2, array2);
-    NSArray *NSArray2 = [NSArray arrayWithObjects:(id *)array2 count:CFBinaryHeapGetCount(heap2)];
+    
+    NSMutableArray *secondMutArray = [NSMutableArray array];
+    for (int i = 0; i < CFBinaryHeapGetCount(heap1); i++) {
+        
+        [secondMutArray addObject:(__bridge id)(*array2 + i*(sizeof(void *)))];
+    }
+    
+    NSArray *NSArray2 = [NSArray arrayWithArray:secondMutArray];
     free(array2);
 
     CFRelease(heap1);
@@ -285,11 +299,11 @@ void JBBBuildDescriptionCallBack(const void *, void *);
 CFComparisonResult JBBBlockCompare(id lhs, id rhs) {
     JBBComparisonBlock localBlock = [[lhs am_associatedValueForKey:@"JBBSortDelegate"] comparisonBlock];
 
-    return localBlock(lhs, rhs);
+    return (CFComparisonResult)localBlock(lhs, rhs);
 }
 
 CFComparisonResult JBBBlockCallBack(const void *lhs, const void *rhs, void *info) {
-    return JBBBlockCompare((id)lhs, (id)rhs);
+    return JBBBlockCompare((__bridge id)lhs, (__bridge id)rhs);
 }
 
 // regular callbacks
@@ -299,14 +313,14 @@ CFComparisonResult JBBMinimumBoxedCompare(id <JBBBoxedComparisonProtocol> lhs, i
 }
 
 CFComparisonResult JBBMinimumCompare(id <JBBComparisonProtocol> lhs, id <JBBComparisonProtocol> rhs) {
-    return [lhs compare:rhs];
+    return (CFComparisonResult)[lhs compare:rhs];
 }
 
 CFComparisonResult JBBMinimumCallBack(const void *lhs, const void *rhs, void *info) {
-    if ([[(id)lhs am_associatedValueForKey:@"JBBSortDelegate"] boxed]) {
-        return JBBMinimumBoxedCompare((id)lhs, (id)rhs);
+    if ([[(__bridge id)lhs am_associatedValueForKey:@"JBBSortDelegate"] boxed]) {
+        return JBBMinimumBoxedCompare((__bridge id)lhs, (__bridge id)rhs);
     } else {
-        return JBBMinimumCompare((id)lhs, (id)rhs);
+        return JBBMinimumCompare((__bridge id)lhs, (__bridge id)rhs);
     }
 }
 
@@ -315,7 +329,7 @@ CFComparisonResult JBBMaximumCallBack(const void *lhs, const void *rhs, void *in
 }
 
 void JBBBuildDescriptionCallBack(const void *val, void *context) {
-    NSMutableString *descriptionString = (NSMutableString *)context;
-    [descriptionString appendFormat:@"\t%@,\n", (id)val];
+    NSMutableString *descriptionString = (__bridge NSMutableString *)context;
+    [descriptionString appendFormat:@"\t%@,\n", (__bridge id)val];
 }
 

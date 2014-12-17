@@ -5,7 +5,7 @@
 //  Public domain because I love you.
 //
 
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 
 @interface NSObject (AMAssociatedObjects)
 - (void)am_associateValue:(id)value withKey:(void *)key; // Retains value.

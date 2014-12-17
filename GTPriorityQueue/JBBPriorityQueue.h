@@ -17,6 +17,8 @@
 //  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+#import <Foundation/Foundation.h>
+
 typedef NSComparisonResult (^JBBComparisonBlock)(id lhs, id rhs);
 
 @protocol JBBComparisonProtocol <NSObject>
@@ -37,18 +39,12 @@ typedef NSComparisonResult (^JBBComparisonBlock)(id lhs, id rhs);
 - (id)initWithClass:(Class)classToStore;
 - (id)initWithClass:(Class)classToStore ordering:(NSComparisonResult)ordering;
 
-// ruby style interface
-- (void)push:(id)obj;
-- (void)pushObjects:(NSArray *)objs;
-- (id)pop;
-- (id)peek;
-
-// objective-c style interface
 - (void)addObject:(id)obj;
 - (void)addObjects:(NSArray *)objs;
 - (id)removeFirstObject;
 - (id)firstObject;
 
 - (BOOL)isEqualToQueue:(JBBPriorityQueue *)otherQueue;
+
 @end
 
